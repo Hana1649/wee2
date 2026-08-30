@@ -11,14 +11,13 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from xgboost import XGBClassifier
-
 from sklearn.metrics import (
     f1_score,
     accuracy_score,
     precision_score,
     recall_score
 )
+from xgboost import XGBClassifier
 
 
 # ============================================================
@@ -31,27 +30,63 @@ st.set_page_config(
 )
 
 st.title("🎮 Android Games Hit Prediction Dashboard")
+
 st.write(
-    "Predict whether an Android game will become a **Hit Game** "
-    "using Machine Learning models."
+    "Predict whether an Android game will become a "
+    "**Hit Game** using Machine Learning models."
 )
 
 
 # ============================================================
-# LOAD + PREPROCESS DATA
-# EXACTLY MATCHES THE NOTEBOOK
+# LOAD AND PREPROCESS DATA
+# THIS MATCHES THE NOTEBOOK
 # ============================================================
 
 @st.cache_data
 def load_and_preprocess_data():
 
+    # --------------------------------------------------------
     # Load dataset
+    # --------------------------------------------------------
+
     df = pd.read_csv("android_games_eda_ready.csv")
 
+    # --------------------------------------------------------
     # Remove duplicates
+    # Same as notebook
+    # --------------------------------------------------------
+
     df.drop_duplicates(inplace=True)
 
-    # Columns removed in the notebook
+    # --------------------------------------------------------
+    # Handle missing values
+    # EXACTLY like notebook
+    # --------------------------------------------------------
+
+    cat_cols = df.select_dtypes(
+        include='object'
+    ).columns
+
+    num_cols = df.select_dtypes(
+        include=np.number
+    ).columns
+
+    # Categorical missing values
+    df[cat_cols] = (
+        df[cat_cols]
+        .fillna('Unknown')
+        .astype(str)
+    )
+
+    # Numerical missing values
+    df[num_cols] = df[num_cols].fillna(
+        df[num_cols].median()
+    )
+
+    # --------------------------------------------------------
+    # Columns dropped in notebook
+    # --------------------------------------------------------
+
     cols_to_drop = [
         'game_id',
         'game_name',
@@ -66,32 +101,42 @@ def load_and_preprocess_data():
     ]
 
     df_prep = df.drop(
-        columns=[c for c in cols_to_drop if c in df.columns]
+        columns=[
+            c for c in cols_to_drop
+            if c in df.columns
+        ]
     )
 
-    # Separate features and target
-    x = df_prep.drop(columns=['is_hit_game'])
+    # --------------------------------------------------------
+    # Separate X and y
+    # --------------------------------------------------------
+
+    x = df_prep.drop(
+        columns=['is_hit_game']
+    )
+
     y = df_prep['is_hit_game']
 
-    # Keep original feature data for the prediction interface
+    # Keep original X for the prediction interface
     original_x = x.copy()
 
-    # ========================================================
-    # EXACT NOTEBOOK STEP:
-    # pd.get_dummies(x, drop_first=True)
-    # ========================================================
+    # --------------------------------------------------------
+    # ONE-HOT ENCODING
+    # EXACTLY like notebook
+    # --------------------------------------------------------
 
     x_encoded = pd.get_dummies(
         x,
         drop_first=True
     )
 
-    # Make sure boolean columns are numeric
+    # Convert encoded data to numeric
     x_encoded = x_encoded.astype(float)
 
-    # ========================================================
-    # EXACT NOTEBOOK TRAIN/TEST SPLIT
-    # ========================================================
+    # --------------------------------------------------------
+    # Train/test split
+    # EXACTLY like notebook
+    # --------------------------------------------------------
 
     x_train, x_test, y_train, y_test = train_test_split(
         x_encoded,
@@ -101,26 +146,38 @@ def load_and_preprocess_data():
         stratify=y
     )
 
-    # ========================================================
-    # EXACT NOTEBOOK SCALING
-    # ========================================================
+    # --------------------------------------------------------
+    # StandardScaler
+    # EXACTLY like notebook
+    # --------------------------------------------------------
 
     scaler = StandardScaler()
 
-    x_train_scaled = scaler.fit_transform(x_train)
-    x_test_scaled = scaler.transform(x_test)
+    x_train_scaled = scaler.fit_transform(
+        x_train
+    )
 
-    # ========================================================
-    # EXACT NOTEBOOK PCA
-    # ========================================================
+    x_test_scaled = scaler.transform(
+        x_test
+    )
+
+    # --------------------------------------------------------
+    # PCA
+    # EXACTLY like notebook
+    # --------------------------------------------------------
 
     pca = PCA(
         n_components=0.95,
         random_state=42
     )
 
-    x_train_pca = pca.fit_transform(x_train_scaled)
-    x_test_pca = pca.transform(x_test_scaled)
+    x_train_pca = pca.fit_transform(
+        x_train_scaled
+    )
+
+    x_test_pca = pca.transform(
+        x_test_scaled
+    )
 
     return (
         df_prep,
@@ -163,13 +220,16 @@ try:
 
 except Exception as e:
 
-    st.error(f"Error loading dataset: {e}")
+    st.error(
+        f"Error loading dataset: {e}"
+    )
+
     st.stop()
 
 
 # ============================================================
-# TRAIN ALL MODELS
-# EXACTLY MATCHES THE NOTEBOOK
+# TRAIN MODELS
+# EXACTLY MATCHES NOTEBOOK
 # ============================================================
 
 @st.cache_resource
@@ -179,9 +239,9 @@ def train_models(
     y_train
 ):
 
-    # ========================================================
-    # EXACT NOTEBOOK MODEL DEFINITIONS
-    # ========================================================
+    # --------------------------------------------------------
+    # Same models and parameters as notebook
+    # --------------------------------------------------------
 
     models = {
 
@@ -228,15 +288,15 @@ def train_models(
 
     trained_models = {}
 
-    # ========================================================
-    # Train models
-    # ========================================================
+    # --------------------------------------------------------
+    # Train each model
+    # --------------------------------------------------------
 
     for name, model in models.items():
 
         if name == 'Naive Bayes':
 
-            # Notebook uses PCA for Naive Bayes
+            # Naive Bayes uses PCA data
             model.fit(
                 x_train_pca,
                 y_train
@@ -271,8 +331,7 @@ with st.spinner(
 
 
 # ============================================================
-# CREATE EVALUATION RESULTS
-# EXACTLY MATCHES NOTEBOOK METRICS
+# CALCULATE MODEL RESULTS
 # ============================================================
 
 def calculate_results():
@@ -334,10 +393,11 @@ def calculate_results():
             )
         })
 
-    results_df = pd.DataFrame(results)
+    results_df = pd.DataFrame(
+        results
+    )
 
-    # Same ordering as notebook comparison:
-    # highest F1 first for easier presentation
+    # Sort by F1 score
     results_df = results_df.sort_values(
         by="F1-Score",
         ascending=False
@@ -367,7 +427,9 @@ tab1, tab2 = st.tabs(
 
 with tab1:
 
-    st.header("Model Performance Metrics")
+    st.header(
+        "Model Performance Metrics"
+    )
 
     # --------------------------------------------------------
     # Dataset information
@@ -376,24 +438,28 @@ with tab1:
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
+
         st.metric(
             "Dataset Size",
             f"{len(df_prep):,}"
         )
 
     with col2:
+
         st.metric(
             "Training Samples",
             f"{len(x_train):,}"
         )
 
     with col3:
+
         st.metric(
             "Testing Samples",
             f"{len(x_test):,}"
         )
 
     with col4:
+
         st.metric(
             "Encoded Features",
             f"{x_encoded.shape[1]}"
@@ -405,7 +471,9 @@ with tab1:
     # Metrics table
     # --------------------------------------------------------
 
-    st.subheader("Model Performance")
+    st.subheader(
+        "Model Performance"
+    )
 
     st.dataframe(
         results_df,
@@ -420,61 +488,69 @@ with tab1:
     best_model = results_df.iloc[0]
 
     st.success(
-        f"🏆 **Best Model: {best_model['Model']}** "
-        f"with an F1-Score of **{best_model['F1-Score']:.4f}**"
+        f"🏆 **Best Model: {best_model['Model']}**  \n"
+        f"F1-Score: **{best_model['F1-Score']:.4f}**"
     )
 
     # --------------------------------------------------------
-    # F1 SCORE CHART
+    # F1 chart
     # --------------------------------------------------------
 
-    st.subheader("F1-Score Comparison")
+    st.subheader(
+        "F1-Score Comparison"
+    )
 
-    chart_df = results_df.set_index("Model")[
-        ["F1-Score"]
-    ]
+    chart_df = results_df.set_index(
+        "Model"
+    )[["F1-Score"]]
 
-    st.bar_chart(chart_df)
+    st.bar_chart(
+        chart_df
+    )
 
     # --------------------------------------------------------
-    # PCA INFORMATION
+    # PCA information
     # --------------------------------------------------------
 
-    st.subheader("PCA Information")
+    st.subheader(
+        "PCA Information"
+    )
 
-    col1, col2 = st.columns(2)
+    pca_col1, pca_col2 = st.columns(2)
 
-    with col1:
+    with pca_col1:
 
         st.metric(
-            "Original Features",
+            "Original Feature Dimensions",
             x_train_scaled.shape[1]
         )
 
-    with col2:
+    with pca_col2:
 
         st.metric(
-            "PCA Components",
+            "PCA Feature Dimensions",
             x_train_pca.shape[1]
         )
 
     st.caption(
-        "PCA retains 95% of the variance and is used only for "
-        "the Naive Bayes model, matching the notebook."
+        "PCA retains 95% of the variance and is used "
+        "for the Naive Bayes model."
     )
 
 
 # ============================================================
-# TAB 2 — CUSTOM PREDICTION
+# TAB 2 — MAKE A PREDICTION
 # ============================================================
 
 with tab2:
 
-    st.header("Predict Hit Status for a New Game")
+    st.header(
+        "Predict Hit Status for a New Game"
+    )
 
     st.write(
         "Enter the characteristics of a new Android game "
-        "and select a trained model."
+        "and select a model."
     )
 
     # --------------------------------------------------------
@@ -493,19 +569,23 @@ with tab2:
     st.divider()
 
     # --------------------------------------------------------
-    # CREATE INPUT DATA
+    # Identify feature types
+    # Same logic as notebook
     # --------------------------------------------------------
 
-    input_data = {}
-
-    # Get numerical and categorical columns
     num_cols = original_x.select_dtypes(
         include=np.number
     ).columns.tolist()
 
     cat_cols = original_x.select_dtypes(
-        include=['object', 'category', 'bool']
+        include='object'
     ).columns.tolist()
+
+    # --------------------------------------------------------
+    # Input layout
+    # --------------------------------------------------------
+
+    input_data = {}
 
     col_left, col_right = st.columns(2)
 
@@ -533,8 +613,9 @@ with tab2:
             original_x[col].median()
         )
 
-        # Prevent min/max from being identical
+        # Avoid identical min/max
         if min_val == max_val:
+
             max_val = min_val + 1.0
 
         input_data[col] = target_col.number_input(
@@ -569,6 +650,7 @@ with tab2:
         )
 
         if len(options) == 0:
+
             options = ['Unknown']
 
         input_data[col] = target_col.selectbox(
@@ -576,11 +658,11 @@ with tab2:
             options=options
         )
 
+    st.divider()
+
     # ========================================================
     # PREDICTION BUTTON
     # ========================================================
-
-    st.divider()
 
     if st.button(
         "🎯 Predict Hit Status",
@@ -589,7 +671,7 @@ with tab2:
     ):
 
         # ----------------------------------------------------
-        # Create DataFrame from user input
+        # Create DataFrame
         # ----------------------------------------------------
 
         input_df = pd.DataFrame(
@@ -597,7 +679,32 @@ with tab2:
         )
 
         # ----------------------------------------------------
-        # EXACT SAME ENCODING AS NOTEBOOK
+        # Fill missing values if any
+        # Same logic as notebook
+        # ----------------------------------------------------
+
+        input_cat_cols = input_df.select_dtypes(
+            include='object'
+        ).columns
+
+        input_num_cols = input_df.select_dtypes(
+            include=np.number
+        ).columns
+
+        input_df[input_cat_cols] = (
+            input_df[input_cat_cols]
+            .fillna('Unknown')
+            .astype(str)
+        )
+
+        for col in input_num_cols:
+
+            input_df[col] = input_df[col].fillna(
+                original_x[col].median()
+            )
+
+        # ----------------------------------------------------
+        # EXACT SAME ONE-HOT ENCODING
         # ----------------------------------------------------
 
         input_encoded = pd.get_dummies(
@@ -607,8 +714,7 @@ with tab2:
 
         # ----------------------------------------------------
         # IMPORTANT:
-        # Make input have EXACTLY the same columns as
-        # x_encoded used during training.
+        # Force exactly the same columns as training
         # ----------------------------------------------------
 
         input_encoded = input_encoded.reindex(
@@ -616,11 +722,10 @@ with tab2:
             fill_value=0
         )
 
-        # Ensure same order and numeric type
         input_encoded = input_encoded.astype(float)
 
         # ----------------------------------------------------
-        # Apply SAME scaler used for notebook-style training
+        # Apply SAME scaler
         # ----------------------------------------------------
 
         input_scaled = scaler.transform(
@@ -628,7 +733,7 @@ with tab2:
         )
 
         # ----------------------------------------------------
-        # Naive Bayes uses PCA
+        # Make prediction
         # ----------------------------------------------------
 
         if selected_model_name == 'Naive Bayes':
@@ -666,10 +771,7 @@ with tab2:
             )
 
         # ----------------------------------------------------
-        # Confidence / probability
-        #
-        # SVM in the notebook does NOT use probability=True,
-        # so we do not add probability estimates here.
+        # Probability
         # ----------------------------------------------------
 
         if hasattr(
@@ -704,6 +806,6 @@ with tab2:
         else:
 
             st.info(
-                "This model does not provide probability "
-                "estimates in the current configuration."
+                "Probability estimates are not available "
+                "for this model."
             )
