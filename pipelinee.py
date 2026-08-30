@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -19,45 +19,50 @@ from xgboost import XGBClassifier
 from sklearn.metrics import classification_report, f1_score, accuracy_score, precision_score, recall_score
 
 # ==========================================
-# 1. LOAD & PREPARE DATA
+# 1. LOAD DATA
 # ==========================================
-# Load the dataset
 df = pd.read_csv('android_games.csv')
 
-# Define features and target variable
-# Replace 'is_hit_game' and column names with your exact dataset column names
+# Define target and features
 X = df.drop(columns=['is_hit_game'])
 y = df['is_hit_game']
 
-# Identify numeric and categorical columns
+# Separate numerical and categorical columns
 num_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
 cat_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
 
 # ==========================================
 # 2. PREPROCESSING PIPELINE
 # ==========================================
-# Numeric pipeline: Impute missing values with median, then scale
-num_transformer = Pipeline([
+# Handle missing values and scale numerical features
+num_pipeline = Pipeline([
     ('imputer', SimpleImputer(strategy='median')),
     ('scaler', StandardScaler())
 ])
 
-# Combine preprocessing
-preprocessor = ColumnTransformer([
-    ('num', num_transformer, num_cols)
-], remainder='drop')
+# One-hot encode categorical features if present
+cat_pipeline = Pipeline([
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
+])
 
-# Split data into train and test sets (stratified for class imbalance)
+# Combine column transformers
+preprocessor = ColumnTransformer([
+    ('num', num_pipeline, num_cols),
+    ('cat', cat_pipeline, cat_cols)
+])
+
+# Stratified Train-Test Split to maintain class ratio
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# Apply preprocessing
+# Fit and transform training data; transform test data
 X_train_prep = preprocessor.fit_transform(X_train)
 X_test_prep = preprocessor.transform(X_test)
 
 # ==========================================
-# 3. MODEL SELECTION & TRAINING
+# 3. MODEL SELECTION & EVALUATION
 # ==========================================
 models = {
     'K-Nearest Neighbors': KNeighborsClassifier(),
@@ -72,9 +77,13 @@ models = {
 results = []
 
 for name, model in models.items():
+    # Train model
     model.fit(X_train_prep, y_train)
+    
+    # Predict test set
     y_pred = model.predict(X_test_prep)
     
+    # Calculate evaluation metrics
     acc = accuracy_score(y_test, y_pred)
     prec = precision_score(y_test, y_pred, zero_division=0)
     rec = recall_score(y_test, y_pred, zero_division=0)
@@ -88,17 +97,17 @@ for name, model in models.items():
         'F1-Score': round(f1, 4)
     })
 
-# Convert results to DataFrame and sort by F1-Score
+# Convert evaluation metrics into DataFrame
 results_df = pd.DataFrame(results).sort_values(by='F1-Score', ascending=False).reset_index(drop=True)
 print(results_df)
 
 # ==========================================
-# 4. VISUALIZATION
+# 4. PLOT RESULTS
 # ==========================================
 plt.figure(figsize=(10, 5))
-sns.barplot(data=results_df, x='F1-Score', y='Model', palette='viridis')
-plt.title('Model Comparison - F1 Score')
-plt.xlabel('F1 Score')
+sns.barplot(data=results_df, x='F1-Score', y='Model', palette='Blues_r')
+plt.title('Model Performance Comparison (F1-Score)')
+plt.xlabel('F1-Score')
 plt.ylabel('Model')
 plt.xlim(0, 1)
 plt.tight_layout()
