@@ -40,7 +40,7 @@ def load_and_preprocess_data():
     num_cols = X.select_dtypes(include=np.number).columns.tolist()
     cat_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
     
-    # Stratified split to preserve class imbalance ratio across sets
+    # Stratified split with fixed random seed to match notebook test set splits exactly
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
@@ -53,7 +53,7 @@ except Exception as e:
     st.error(f"Error loading dataset: {e}")
     st.stop()
 
-# Helper constructor for preprocessor
+# Helper function to create preprocessors dynamically for each model pipeline
 def build_preprocessor():
     num_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='median')),
@@ -97,16 +97,14 @@ def train_models(X_tr, y_tr):
             ('preprocessor', build_preprocessor()),
             ('classifier', SVC(kernel='rbf', class_weight='balanced', random_state=42, probability=True))
         ]),
-        # Naive Bayes pipeline with PCA to handle multi-collinearity
         'Naive Bayes (PCA)': Pipeline([
             ('preprocessor', build_preprocessor()),
             ('pca', PCA(n_components=0.95, random_state=42)),
             ('classifier', GaussianNB())
         ]),
-        # Unweighted default KNN in high dimensions yields lowest F1 score on imbalanced target
         'KNN': Pipeline([
             ('preprocessor', build_preprocessor()),
-            ('classifier', KNeighborsClassifier(n_neighbors=5))
+            ('classifier', KNeighborsClassifier(n_neighbors=5, weights='uniform', p=2))
         ])
     }
     
@@ -153,20 +151,17 @@ with tab2:
     input_data = {}
     col_left, col_right = st.columns(2)
     
-    # Render numerical feature inputs
     for idx, col in enumerate(num_cols):
         target_col = col_left if idx % 2 == 0 else col_right
         min_val = float(X[col].min())
         max_val = float(X[col].max())
         default_val = float(X[col].median())
         
-        # Handle constant features safely
         if min_val == max_val:
             max_val = min_val + 1.0
             
         input_data[col] = target_col.number_input(f"{col}", value=default_val, min_value=min_val, max_value=max_val)
         
-    # Render categorical feature inputs
     for idx, col in enumerate(cat_cols):
         target_col = col_left if idx % 2 == 0 else col_right
         options = X[col].dropna().unique().tolist()
